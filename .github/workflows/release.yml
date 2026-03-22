@@ -6,20 +6,21 @@ on:
       - closed
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   check-code:
-    if: ${{ github.event.pull_request.merged == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
     runs-on: windows-latest
 
     steps:
       - name: Checkout merged commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,7 +72,7 @@ jobs:
           '@ | python -
 
   build-release:
-    if: ${{ github.event.pull_request.merged == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
     needs: check-code
     runs-on: windows-latest
 
@@ -79,7 +80,7 @@ jobs:
       - name: Checkout merged commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -107,7 +108,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: ${{ github.event.pull_request.merged == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
     needs: build-release
     runs-on: ubuntu-latest
 
@@ -129,6 +130,6 @@ jobs:
           name: Headcode JSON to CSV ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
           body: |
-            Automated release for merged PR #${{ github.event.pull_request.number }}.
-            Commit: ${{ github.event.pull_request.merge_commit_sha }}
+            Automated release for ${{ github.event_name == 'pull_request' && format('merged PR #{0}', github.event.pull_request.number) || 'manual dispatch' }}.
+            Commit: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           files: release-assets/headcode-json-to-csv.exe
