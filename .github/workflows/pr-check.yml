@@ -1,0 +1,69 @@
+name: PR Check Code
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+jobs:
+  check-code:
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate syntax
+        run: python -m py_compile json_to_csv_gui.py
+
+      - name: Smoke test conversion flow
+        shell: pwsh
+        run: |
+          @'
+          import csv
+          import json
+          import tempfile
+          from pathlib import Path
+
+          from json_to_csv_gui import collect_json_files, convert_json_file_to_csv
+
+          with tempfile.TemporaryDirectory() as tmp:
+              root = Path(tmp)
+              input_dir = root / "input"
+              output_dir = root / "output"
+              input_dir.mkdir()
+              output_dir.mkdir()
+
+              sample = input_dir / "sample.json"
+              sample.write_text(
+                  json.dumps([{"id": 1, "name": "A"}, {"id": 2, "name": "B"}]),
+                  encoding="utf-8",
+              )
+
+              files = collect_json_files(input_dir, recursive=False)
+              assert len(files) == 1, f"expected 1 json file, found {len(files)}"
+
+              out = output_dir / "sample.csv"
+              rows = convert_json_file_to_csv(sample, out)
+              assert rows == 2, f"expected 2 rows, got {rows}"
+              assert out.exists(), "csv output was not created"
+
+              with out.open(newline="", encoding="utf-8") as handle:
+                  data = list(csv.DictReader(handle))
+
+              assert len(data) == 2, f"expected 2 csv rows, got {len(data)}"
+              assert data[0]["id"] == "1", f"unexpected first row id: {data[0]['id']}"
+
+          print("Smoke test passed.")
+          '@ | python -
